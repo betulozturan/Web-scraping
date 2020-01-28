@@ -1,0 +1,1828 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# TED TALKS SCRAPING PROJECT"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Betuel Oezturan \n",
+    "<br>\n",
+    "01/943905\n",
+    "<br>\n",
+    "Universität Konstanz"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For my final project, I chose www.ted.com to scrape which has hundreds of inspiring videos on several topics. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from IPython.core.display import display, HTML\n",
+    "display(HTML('http://www.ted.com/talks'))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "First of all, I need to check if ted.com permits web-scraping. I checked terms of condition and robots.txt file. Apart from those mentiond as disallow:/ on robots.txt page, ted can be scraped for non-commercial purposes. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "User-agent: *\n",
+       "Disallow: /latest\n",
+       "Disallow: /latest-talk\n",
+       "Disallow: /latest-playlist\n",
+       "Disallow: /people\n",
+       "Disallow: /profiles\n",
+       "Disallow: /conversations\n",
+       "Disallow: /themes/rss\n",
+       "\n",
+       "User-agent: Baiduspider\n",
+       "Disallow: /search\n",
+       "Disallow: /latest\n",
+       "Disallow: /latest-talk\n",
+       "Disallow: /latest-playlist\n",
+       "Disallow: /people\n",
+       "Disallow: /profiles\n"
+      ],
+      "text/plain": [
+       "<IPython.core.display.HTML object>"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "#display robots.txt \n",
+    "from IPython.core.display import display, HTML\n",
+    "display(HTML('https://www.ted.com/robots.txt'))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "In this notebook, \n",
+    "1. I will firstly parse ted video links. Ted has around 3000 videos which the oldest one is from June 2006. I will store their links in my computer as 'ted_talks.csv' file for not to run same code everytime. The structure of the links are as follows: 'https://www.ted.com/name_of_the_talk' . We will use this structure to parse video links because they are not stored as full url links on html version of the website. \n",
+    "<br>\n",
+    "<br>\n",
+    "2. I will show step by step how I scrape one video as an example. Afterwards, I will create a function code to scrape all videos.   \n",
+    "<br>\n",
+    "3. And then, I will visit every individual video page, collect the important data with my already defined 'get_talk_content' function and store them as 'ted_talks_data.csv' on my computer to access later. \n",
+    "<br>\n",
+    "<br>\n",
+    "4. We will discuss what we can do with the stored data\n",
+    "\n",
+    "<br>\n",
+    "The purpose of the project is to store important data about ted talks in a structure ready to be used for any research related to the TED-talks"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Let's look at 'Why you should read Don Quixote' talk as an example:\n",
+    "<br>In the video page you can see: \n",
+    "<br>-title of the video\n",
+    "<br>-name of the speaker\n",
+    "<br>-number of views\n",
+    "<br>-description of the video\n",
+    "<br>-duration of the talk\n",
+    "<br>-related talks\n",
+    "<br>in an additional url you can also access transcripts of the talks"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 203,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "True"
+      ]
+     },
+     "execution_count": 203,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#you can open the mentioned talk by running the code  below\n",
+    "import webbrowser\n",
+    "webbrowser.open('https://www.ted.com/talks/ilan_stavans_why_should_you_read_don_quixote')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 1. Getting Links for All videos"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "from bs4 import BeautifulSoup\n",
+    "import urllib\n",
+    "from urllib.request import urlopen\n",
+    "import time\n",
+    "import requests\n",
+    "import re\n",
+    "from IPython.display import clear_output\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Firstly, try to write a code that will work for parsing talk links on one page: When you open 'https://www.ted.com/talks' page, it has several links embedded in the code such as 'watch', 'discover','participate' etc. sections. What we want to have is the links that will direct us to the talk links. We will run a code for one page of talks archive, that will parse only talk links and parse them once for us. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "base = 'https://www.ted.com/talks?page={}'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "paginator = list(range(0, 40))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "toget = base.format(str(paginator[6]))\n",
+    "html = requests.get(toget)\n",
+    "soup = BeautifulSoup(html.text, 'html5lib')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "all_url=soup.select('.ga-link') \n",
+    "#using 'selectorgadget' we find every content that has .ga-link attribute which means links to anything on the page"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "talks_meta=soup.find_all(attrs={\"data-ga-context\":\"talks\"}) #we parsed only links that has 'talks' attribute"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['/talks/darieth_chisolm_let_s_call_revenge_porn_what_it_is_digital_domestic_violence',\n",
+       " '/talks/alexis_jones_redefining_manhood_one_locker_room_talk_at_a_time',\n",
+       " '/talks/congrui_jin_what_if_cracks_in_concrete_could_fix_themselves']"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "talks=[]\n",
+    "for talk in talks_meta:\n",
+    "    talks.append(talk['href'])\n",
+    "talks=list(set(talks)) # set function eliminates duplicates\n",
+    "talks[:3]\n",
+    "# we need to append 'www.ted.com on the beginning to open the pages, but we will do it on our main code'"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now we know how to parse talk links, we can define a function to do it for every page. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def get_talk_links(input_range = range(0, 90)): \n",
+    "#range of pages, if you change 90 to 15, the code will parse until 14th page\n",
+    "#so you will have less TED videos scraped at the end\n",
+    "    \n",
+    "    all_links = []\n",
+    "    base = base = 'https://www.ted.com/talks?page={}'\n",
+    "    for i in input_range: \n",
+    "        time.sleep(2) # wait 2 seconds\n",
+    "        clear_output(wait=True) # clear output\n",
+    "        url = base.format(str(i))\n",
+    "        html = requests.get(url)\n",
+    "        while html.status_code == 429: # wait and retry in case of error\n",
+    "            print('Error. Too many requests. Waiting a bit..')\n",
+    "            time.sleep(15)\n",
+    "            html = requests.get(url)\n",
+    "        soup =  BeautifulSoup(html.text, 'html5lib')\n",
+    "        talks_meta = soup.find_all(attrs={\"data-ga-context\":\"talks\"})\n",
+    "        \n",
+    "        print(\"Current page: {}, Status code: {}, Links: {}\".format(url, str(html.status_code),\n",
+    "                                                               str(len(talks))))\n",
+    "\n",
+    "            \n",
+    "        for talk in talks_meta:\n",
+    "            all_links.append('https://www.ted.com'+talk['href'])\n",
+    "            \n",
+    "        all_links=list(set(all_links))\n",
+    "        \n",
+    "    return(all_links)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Current page: https://www.ted.com/talks?page=89, Status code: 200, Links: 36\n"
+     ]
+    }
+   ],
+   "source": [
+    "talk_data=get_talk_links()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/Users/betulraylaz/Documents/data-hands-on\n"
+     ]
+    }
+   ],
+   "source": [
+    "%cd \"/Users/betulraylaz/Documents/data-hands-on\" \n",
+    "#change it to your local repository\n",
+    "#save the urls as csv file, so we will not have to scrape them everytime we need\n",
+    "\n",
+    "with open('ted_talks.csv', 'w',encoding = 'utf-8') as f:\n",
+    "     for talk in talk_data:\n",
+    "        f.write(talk + '\\n')\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/Users/betulraylaz/Documents/data-hands-on\n"
+     ]
+    }
+   ],
+   "source": [
+    "%cd \"/Users/betulraylaz/Documents/data-hands-on\" \n",
+    "#read them into python\n",
+    "with open('ted_talks.csv', 'r', encoding = 'utf-8') as f:\n",
+    "    talk_link_csv = f.read().split('\\n')[:-1] # split\n",
+    "    \n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'https://www.ted.com/talks/rose_eveleth_how_do_we_smell'"
+      ]
+     },
+     "execution_count": 22,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "talk_link_csv[4]\n",
+    "#Yes, we have them saved on our computer"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 2. Scraping one video detail"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "test = talk_link_csv[7] # you can choose any video as an example\n",
+    "html = requests.get(test)\n",
+    "soup = BeautifulSoup(html.text, 'html5lib')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'Harish Manwani: Profit’s not always the point | TED Talk'"
+      ]
+     },
+     "execution_count": 25,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#video name as a string\n",
+    "title=soup.title.string\n",
+    "type(title)\n",
+    "title"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'https://www.ted.com/talks/harish_manwani_profit_s_not_always_the_point'"
+      ]
+     },
+     "execution_count": 26,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#video link\n",
+    "url=soup.link[\"href\"]\n",
+    "url"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "\"You might not expect the chief operating officer of a major global corporation to look too far beyond either the balance sheet or the bottom line. But Harish Manwani, COO of Unilever, makes a passionate argument that doing so to include value, purpose and sustainability in top-level decision-making is not just savvy, it's the only way to run a 21st century business responsibly.\""
+      ]
+     },
+     "execution_count": 27,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#description\n",
+    "desc=soup.find(itemprop=\"description\")\n",
+    "desc['content']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Harish Manwani\n"
+     ]
+    }
+   ],
+   "source": [
+    "#author\n",
+    "author=soup.find(attrs={\"name\":\"author\"})\n",
+    "print(author['content'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Profit’s not always the point\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(soup.find(attrs={\"property\":\"og:title\"})['content'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 30,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "TED, talks, business, sustainability\n"
+     ]
+    }
+   ],
+   "source": [
+    "#keywords as strings\n",
+    "keywords=soup.find(attrs={\"name\":\"keywords\"})\n",
+    "print(keywords['content'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'838.0'"
+      ]
+     },
+     "execution_count": 31,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#duration\n",
+    "duration=soup.find(attrs={\"property\":\"og:video:duration\"})\n",
+    "duration['content']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'PT13M58S'"
+      ]
+     },
+     "execution_count": 32,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#duration as Minutes and Seconds\n",
+    "dur=soup.find(itemprop=\"duration\")\n",
+    "dur['content']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 33,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "business\n",
+      "sustainability\n"
+     ]
+    }
+   ],
+   "source": [
+    "#tags as seperate items\n",
+    "tags=soup.find_all(attrs={\"property\":\"og:video:tag\"})\n",
+    "for tag in tags: \n",
+    "    print(tag['content'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 34,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'1636306'"
+      ]
+     },
+     "execution_count": 34,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#viewed count\n",
+    "views=soup.find(itemprop=\"interactionCount\")\n",
+    "views['content']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 35,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'2014-01-13T16:01:03+00:00'"
+      ]
+     },
+     "execution_count": 35,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#upload date\n",
+    "Upload_Date=soup.find(itemprop='uploadDate')\n",
+    "Upload_Date['content']"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 3.Scrape All Videos"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 49,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def get_talk_content(talk_links):\n",
+    "    all_talks = []\n",
+    "    #errors=[]\n",
+    "    for id_,link in enumerate(talk_links):        \n",
+    "    \n",
+    "            time.sleep(1.5)\n",
+    "            html = requests.get(link)\n",
+    "            print(\"current id:\" + str(id_) + ', current page:' + link)\n",
+    "            clear_output(wait = True)\n",
+    "            while html.status_code == 429: # wait and retry in case of error\n",
+    "                print('Error. Too many requests. Waiting a bit..')\n",
+    "                time.sleep(30)\n",
+    "                html = requests.get(link)\n",
+    "            soup = BeautifulSoup(html.text, 'html5lib') \n",
+    "            \n",
+    "            title=soup.find(attrs={\"property\":\"og:title\"})['content']\n",
+    "            \n",
+    "            url=soup.link[\"href\"]\n",
+    "            \n",
+    "            desc=soup.find(itemprop=\"description\")['content']\n",
+    "            \n",
+    "            author=soup.find(attrs={\"name\":\"author\"})['content']\n",
+    "            \n",
+    "            keywords=soup.find(attrs={\"name\":\"keywords\"})['content']\n",
+    "            \n",
+    "            tags_=soup.find_all(attrs={\"property\":\"og:video:tag\"})\n",
+    "            \n",
+    "            \n",
+    "            tags=[]\n",
+    "            for tag in tags_:\n",
+    "                tags.append(tag['content'])\n",
+    "                \n",
+    "            duration=soup.find(attrs={\"property\":\"og:video:duration\"})['content']\n",
+    "            \n",
+    "            dur=soup.find(itemprop=\"duration\")['content']\n",
+    "       \n",
+    "            views=soup.find(itemprop=\"interactionCount\")['content']\n",
+    "        \n",
+    "            Upload_Date=soup.find(itemprop='uploadDate')['content']\n",
+    "            \n",
+    "            year=soup.find(itemprop='uploadDate')['content'][0:4]\n",
+    "            \n",
+    "            talk_data = {'title': title, 'url':url,'desc':desc, 'author':author\n",
+    "                         , 'keywords': keywords,'tags':tags, \"duration\":duration, 'duration in minutes':dur,\n",
+    "                         'views': views,'date': Upload_Date,'year':year}\n",
+    "           \n",
+    "            all_talks.append(talk_data)\n",
+    "  \n",
+    "    return all_talks \n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 50,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "current id:3203, current page:https://www.ted.com/talks/aja_monet_and_phillip_agnew_a_love_story_about_the_power_of_art_as_organizing\n"
+     ]
+    }
+   ],
+   "source": [
+    "talk_cont=get_talk_content(talk_link_csv) #this code lasts approximately 2-3 hours"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pandas.core.frame.DataFrame'>\n",
+      "RangeIndex: 3204 entries, 0 to 3203\n",
+      "Data columns (total 11 columns):\n",
+      "author                 3204 non-null object\n",
+      "date                   3204 non-null object\n",
+      "desc                   3204 non-null object\n",
+      "duration               3204 non-null object\n",
+      "duration in minutes    3204 non-null object\n",
+      "keywords               3204 non-null object\n",
+      "tags                   3204 non-null object\n",
+      "title                  3204 non-null object\n",
+      "url                    3204 non-null object\n",
+      "views                  3204 non-null object\n",
+      "year                   3204 non-null object\n",
+      "dtypes: object(11)\n",
+      "memory usage: 275.4+ KB\n"
+     ]
+    }
+   ],
+   "source": [
+    "talkpd=pd.DataFrame(talk_cont)\n",
+    "talkpd.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 48,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>author</th>\n",
+       "      <th>date</th>\n",
+       "      <th>desc</th>\n",
+       "      <th>duration</th>\n",
+       "      <th>duration in minutes</th>\n",
+       "      <th>keywords</th>\n",
+       "      <th>tags</th>\n",
+       "      <th>title</th>\n",
+       "      <th>url</th>\n",
+       "      <th>views</th>\n",
+       "      <th>year</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>Denise Herzing</td>\n",
+       "      <td>2013-06-06T15:13:15+00:00</td>\n",
+       "      <td>For 28 years, Denise Herzing has spent five mo...</td>\n",
+       "      <td>878.0</td>\n",
+       "      <td>PT14M38S</td>\n",
+       "      <td>TED, talks, animals, biology, communication, l...</td>\n",
+       "      <td>[animals, biology, communication, language, oc...</td>\n",
+       "      <td>Could we speak the language of dolphins?</td>\n",
+       "      <td>https://www.ted.com/talks/denise_herzing_could...</td>\n",
+       "      <td>1287842</td>\n",
+       "      <td>2013</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>Skylar Tibbits</td>\n",
+       "      <td>2013-04-04T14:56:21+00:00</td>\n",
+       "      <td>3D printing has grown in sophistication since ...</td>\n",
+       "      <td>502.0</td>\n",
+       "      <td>PT8M22S</td>\n",
+       "      <td>TED, talks, TED Fellows, design, industrial de...</td>\n",
+       "      <td>[TED Fellows, design, industrial design, techn...</td>\n",
+       "      <td>The emergence of \"4D printing\"</td>\n",
+       "      <td>https://www.ted.com/talks/skylar_tibbits_the_e...</td>\n",
+       "      <td>2703913</td>\n",
+       "      <td>2013</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "           author                       date  \\\n",
+       "0  Denise Herzing  2013-06-06T15:13:15+00:00   \n",
+       "1  Skylar Tibbits  2013-04-04T14:56:21+00:00   \n",
+       "\n",
+       "                                                desc duration  \\\n",
+       "0  For 28 years, Denise Herzing has spent five mo...    878.0   \n",
+       "1  3D printing has grown in sophistication since ...    502.0   \n",
+       "\n",
+       "  duration in minutes                                           keywords  \\\n",
+       "0            PT14M38S  TED, talks, animals, biology, communication, l...   \n",
+       "1             PT8M22S  TED, talks, TED Fellows, design, industrial de...   \n",
+       "\n",
+       "                                                tags  \\\n",
+       "0  [animals, biology, communication, language, oc...   \n",
+       "1  [TED Fellows, design, industrial design, techn...   \n",
+       "\n",
+       "                                      title  \\\n",
+       "0  Could we speak the language of dolphins?   \n",
+       "1            The emergence of \"4D printing\"   \n",
+       "\n",
+       "                                                 url    views  year  \n",
+       "0  https://www.ted.com/talks/denise_herzing_could...  1287842  2013  \n",
+       "1  https://www.ted.com/talks/skylar_tibbits_the_e...  2703913  2013  "
+      ]
+     },
+     "execution_count": 48,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "talkpd.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#we will change date object to datetime in order to work on it easily\n",
+    "talkpd['date'] = pd.to_datetime(talkpd.date)\n",
+    "talkpd['date'] = talkpd['date'].dt.strftime('%Y-%m-%d')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 54,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pandas.core.frame.DataFrame'>\n",
+      "RangeIndex: 3204 entries, 0 to 3203\n",
+      "Data columns (total 10 columns):\n",
+      "author         3204 non-null object\n",
+      "title          3204 non-null object\n",
+      "keywords       3204 non-null object\n",
+      "tags           3204 non-null object\n",
+      "description    3204 non-null object\n",
+      "date           3204 non-null object\n",
+      "duration       3204 non-null float64\n",
+      "views          3204 non-null int64\n",
+      "url            3204 non-null object\n",
+      "year           3204 non-null object\n",
+      "dtypes: float64(1), int64(1), object(8)\n",
+      "memory usage: 250.4+ KB\n"
+     ]
+    }
+   ],
+   "source": [
+    "df = pd.DataFrame({'author': talkpd.author,\n",
+    "                  'title':talkpd.title,\n",
+    "                  'keywords':talkpd.keywords,\n",
+    "                   'tags':talkpd.tags,\n",
+    "                   'description':talkpd.desc,\n",
+    "                  'date':talkpd.date,\n",
+    "                  'duration':talkpd.duration,\n",
+    "                   'views':talkpd.views,\n",
+    "                  'url':talkpd.url,\n",
+    "                  'year':talkpd.year})\n",
+    "df.views = talkpd.views.astype(int)\n",
+    "df.duration = talkpd.duration.astype(float)\n",
+    "# turn some variables to numbers so we can calculate mean etc. \n",
+    "df.to_csv(index=False)\n",
+    "df.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 55,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/Users/betulraylaz/Documents/data-hands-on\n"
+     ]
+    }
+   ],
+   "source": [
+    "%cd \"/Users/betulraylaz/Documents/data-hands-on\" \n",
+    "\n",
+    "# save the data on local repository\n",
+    "\n",
+    "df.to_csv('ted_talks_data.csv', \n",
+    "            encoding = 'utf-8',\n",
+    "            index = False)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 56,
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/Users/betulraylaz/Documents/data-hands-on\n"
+     ]
+    },
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>author</th>\n",
+       "      <th>title</th>\n",
+       "      <th>keywords</th>\n",
+       "      <th>tags</th>\n",
+       "      <th>description</th>\n",
+       "      <th>date</th>\n",
+       "      <th>duration</th>\n",
+       "      <th>views</th>\n",
+       "      <th>url</th>\n",
+       "      <th>year</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>Denise Herzing</td>\n",
+       "      <td>Could we speak the language of dolphins?</td>\n",
+       "      <td>TED, talks, animals, biology, communication, l...</td>\n",
+       "      <td>['animals', 'biology', 'communication', 'langu...</td>\n",
+       "      <td>For 28 years, Denise Herzing has spent five mo...</td>\n",
+       "      <td>2013-06-06</td>\n",
+       "      <td>878.0</td>\n",
+       "      <td>1287843</td>\n",
+       "      <td>https://www.ted.com/talks/denise_herzing_could...</td>\n",
+       "      <td>2013</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>Skylar Tibbits</td>\n",
+       "      <td>The emergence of \"4D printing\"</td>\n",
+       "      <td>TED, talks, TED Fellows, design, industrial de...</td>\n",
+       "      <td>['TED Fellows', 'design', 'industrial design',...</td>\n",
+       "      <td>3D printing has grown in sophistication since ...</td>\n",
+       "      <td>2013-04-04</td>\n",
+       "      <td>502.0</td>\n",
+       "      <td>2703913</td>\n",
+       "      <td>https://www.ted.com/talks/skylar_tibbits_the_e...</td>\n",
+       "      <td>2013</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>Bruno Michel</td>\n",
+       "      <td>How our brains will keep up with AI</td>\n",
+       "      <td>TED, talks, technology, AI, machine learning, ...</td>\n",
+       "      <td>['technology', 'AI', 'machine learning', 'inte...</td>\n",
+       "      <td>Since humanity first imagined the reality of i...</td>\n",
+       "      <td>2018-02-12</td>\n",
+       "      <td>605.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>https://www.ted.com/talks/bruno_michel_how_our...</td>\n",
+       "      <td>2018</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>Chip Kidd</td>\n",
+       "      <td>Designing books is no laughing matter. OK, it is.</td>\n",
+       "      <td>TED, talks, creativity, design, humor, literature</td>\n",
+       "      <td>['creativity', 'design', 'humor', 'literature']</td>\n",
+       "      <td>Chip Kidd doesn't judge books by their cover, ...</td>\n",
+       "      <td>2012-04-04</td>\n",
+       "      <td>1036.0</td>\n",
+       "      <td>2238891</td>\n",
+       "      <td>https://www.ted.com/talks/chip_kidd_designing_...</td>\n",
+       "      <td>2012</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>Rose Eveleth</td>\n",
+       "      <td>How do we smell?</td>\n",
+       "      <td>TED, talks, TED-Ed, animation, smell, human bo...</td>\n",
+       "      <td>['TED-Ed', 'animation', 'smell', 'human body',...</td>\n",
+       "      <td>An adult human can distinguish up to 10,000 od...</td>\n",
+       "      <td>2019-02-22</td>\n",
+       "      <td>244.0</td>\n",
+       "      <td>1193706</td>\n",
+       "      <td>https://www.ted.com/talks/rose_eveleth_how_do_...</td>\n",
+       "      <td>2019</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "           author                                              title  \\\n",
+       "0  Denise Herzing           Could we speak the language of dolphins?   \n",
+       "1  Skylar Tibbits                     The emergence of \"4D printing\"   \n",
+       "2    Bruno Michel                How our brains will keep up with AI   \n",
+       "3       Chip Kidd  Designing books is no laughing matter. OK, it is.   \n",
+       "4    Rose Eveleth                                   How do we smell?   \n",
+       "\n",
+       "                                            keywords  \\\n",
+       "0  TED, talks, animals, biology, communication, l...   \n",
+       "1  TED, talks, TED Fellows, design, industrial de...   \n",
+       "2  TED, talks, technology, AI, machine learning, ...   \n",
+       "3  TED, talks, creativity, design, humor, literature   \n",
+       "4  TED, talks, TED-Ed, animation, smell, human bo...   \n",
+       "\n",
+       "                                                tags  \\\n",
+       "0  ['animals', 'biology', 'communication', 'langu...   \n",
+       "1  ['TED Fellows', 'design', 'industrial design',...   \n",
+       "2  ['technology', 'AI', 'machine learning', 'inte...   \n",
+       "3    ['creativity', 'design', 'humor', 'literature']   \n",
+       "4  ['TED-Ed', 'animation', 'smell', 'human body',...   \n",
+       "\n",
+       "                                         description        date  duration  \\\n",
+       "0  For 28 years, Denise Herzing has spent five mo...  2013-06-06     878.0   \n",
+       "1  3D printing has grown in sophistication since ...  2013-04-04     502.0   \n",
+       "2  Since humanity first imagined the reality of i...  2018-02-12     605.0   \n",
+       "3  Chip Kidd doesn't judge books by their cover, ...  2012-04-04    1036.0   \n",
+       "4  An adult human can distinguish up to 10,000 od...  2019-02-22     244.0   \n",
+       "\n",
+       "     views                                                url  year  \n",
+       "0  1287843  https://www.ted.com/talks/denise_herzing_could...  2013  \n",
+       "1  2703913  https://www.ted.com/talks/skylar_tibbits_the_e...  2013  \n",
+       "2        0  https://www.ted.com/talks/bruno_michel_how_our...  2018  \n",
+       "3  2238891  https://www.ted.com/talks/chip_kidd_designing_...  2012  \n",
+       "4  1193706  https://www.ted.com/talks/rose_eveleth_how_do_...  2019  "
+      ]
+     },
+     "execution_count": 56,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "%cd \"/Users/betulraylaz/Documents/data-hands-on\"  \n",
+    "\n",
+    "#read the saved file to Python\n",
+    "\n",
+    "df = pd.read_csv('ted_talks_data.csv',\n",
+    "                encoding = 'utf-8')\n",
+    "df.head(5)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 4.What we can do with the Data"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We can basically see descriptions of each column: mean of the duration, most talked author etc."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 57,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "count    3.204000e+03\n",
+       "mean     1.718719e+06\n",
+       "std      2.786268e+06\n",
+       "min      0.000000e+00\n",
+       "25%      6.967380e+05\n",
+       "50%      1.171111e+06\n",
+       "75%      1.765940e+06\n",
+       "max      5.118439e+07\n",
+       "Name: views, dtype: float64"
+      ]
+     },
+     "execution_count": 57,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df['views'].describe()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 58,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "count    3204.000000\n",
+       "mean      691.361735\n",
+       "std       335.546194\n",
+       "min         0.000000\n",
+       "25%       427.750000\n",
+       "50%       711.000000\n",
+       "75%       944.000000\n",
+       "max      3608.000000\n",
+       "Name: duration, dtype: float64"
+      ]
+     },
+     "execution_count": 58,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df['duration'].describe()\n",
+    "#on avarage, the duration of the talks are 691.36 seconds. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 59,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "count             3203\n",
+       "unique            2822\n",
+       "top       Alex Gendler\n",
+       "freq                14\n",
+       "Name: author, dtype: object"
+      ]
+     },
+     "execution_count": 59,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df['author'].describe()\n",
+    "#most hosted speaker is Alex Gendler, he talked 14 times"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 60,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>author</th>\n",
+       "      <th>title</th>\n",
+       "      <th>keywords</th>\n",
+       "      <th>tags</th>\n",
+       "      <th>description</th>\n",
+       "      <th>date</th>\n",
+       "      <th>duration</th>\n",
+       "      <th>views</th>\n",
+       "      <th>url</th>\n",
+       "      <th>year</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>2514</th>\n",
+       "      <td>Gustavo Dudamel and the Teresa Carreño Youth O...</td>\n",
+       "      <td>El Sistema's top youth orchestra</td>\n",
+       "      <td>TED, talks, TED Prize, children, conducting, c...</td>\n",
+       "      <td>['TED Prize', 'children', 'conducting', 'cultu...</td>\n",
+       "      <td>The Teresa Carreño Youth Orchestra contains th...</td>\n",
+       "      <td>2009-02-18</td>\n",
+       "      <td>1026.0</td>\n",
+       "      <td>2273454</td>\n",
+       "      <td>https://www.ted.com/talks/astonishing_performa...</td>\n",
+       "      <td>2009</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2969</th>\n",
+       "      <td>Sylvia Earle</td>\n",
+       "      <td>My wish: Protect our oceans</td>\n",
+       "      <td>TED, talks, TED Prize, activism, biodiversity,...</td>\n",
+       "      <td>['TED Prize', 'activism', 'biodiversity', 'exp...</td>\n",
+       "      <td>Legendary ocean researcher Sylvia Earle shares...</td>\n",
+       "      <td>2009-02-19</td>\n",
+       "      <td>1096.0</td>\n",
+       "      <td>1325364</td>\n",
+       "      <td>https://www.ted.com/talks/sylvia_earle_s_ted_p...</td>\n",
+       "      <td>2009</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2469</th>\n",
+       "      <td>Jill Tarter</td>\n",
+       "      <td>Join the SETI search</td>\n",
+       "      <td>TED, talks, TED Prize, exploration, extraterre...</td>\n",
+       "      <td>['TED Prize', 'exploration', 'extraterrestrial...</td>\n",
+       "      <td>The SETI Institute's Jill Tarter makes her TED...</td>\n",
+       "      <td>2009-02-20</td>\n",
+       "      <td>1283.0</td>\n",
+       "      <td>1321636</td>\n",
+       "      <td>https://www.ted.com/talks/jill_tarter_s_call_t...</td>\n",
+       "      <td>2009</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1970</th>\n",
+       "      <td>Ed Ulbrich</td>\n",
+       "      <td>How Benjamin Button got his face</td>\n",
+       "      <td>TED, talks, aging, business, entertainment, fi...</td>\n",
+       "      <td>['aging', 'business', 'entertainment', 'film',...</td>\n",
+       "      <td>Ed Ulbrich, the digital-effects guru from Digi...</td>\n",
+       "      <td>2009-02-23</td>\n",
+       "      <td>1087.0</td>\n",
+       "      <td>933438</td>\n",
+       "      <td>https://www.ted.com/talks/ed_ulbrich_shows_how...</td>\n",
+       "      <td>2009</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3181</th>\n",
+       "      <td>Charles Moore</td>\n",
+       "      <td>Seas of plastic</td>\n",
+       "      <td>TED, talks, business, environment, oceans, pla...</td>\n",
+       "      <td>['business', 'environment', 'oceans', 'plastic...</td>\n",
+       "      <td>Capt. Charles Moore of the Algalita Marine Res...</td>\n",
+       "      <td>2009-02-24</td>\n",
+       "      <td>440.0</td>\n",
+       "      <td>1221708</td>\n",
+       "      <td>https://www.ted.com/talks/capt_charles_moore_o...</td>\n",
+       "      <td>2009</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "                                                 author  \\\n",
+       "2514  Gustavo Dudamel and the Teresa Carreño Youth O...   \n",
+       "2969                                       Sylvia Earle   \n",
+       "2469                                        Jill Tarter   \n",
+       "1970                                         Ed Ulbrich   \n",
+       "3181                                      Charles Moore   \n",
+       "\n",
+       "                                 title  \\\n",
+       "2514  El Sistema's top youth orchestra   \n",
+       "2969       My wish: Protect our oceans   \n",
+       "2469              Join the SETI search   \n",
+       "1970  How Benjamin Button got his face   \n",
+       "3181                   Seas of plastic   \n",
+       "\n",
+       "                                               keywords  \\\n",
+       "2514  TED, talks, TED Prize, children, conducting, c...   \n",
+       "2969  TED, talks, TED Prize, activism, biodiversity,...   \n",
+       "2469  TED, talks, TED Prize, exploration, extraterre...   \n",
+       "1970  TED, talks, aging, business, entertainment, fi...   \n",
+       "3181  TED, talks, business, environment, oceans, pla...   \n",
+       "\n",
+       "                                                   tags  \\\n",
+       "2514  ['TED Prize', 'children', 'conducting', 'cultu...   \n",
+       "2969  ['TED Prize', 'activism', 'biodiversity', 'exp...   \n",
+       "2469  ['TED Prize', 'exploration', 'extraterrestrial...   \n",
+       "1970  ['aging', 'business', 'entertainment', 'film',...   \n",
+       "3181  ['business', 'environment', 'oceans', 'plastic...   \n",
+       "\n",
+       "                                            description        date  duration  \\\n",
+       "2514  The Teresa Carreño Youth Orchestra contains th...  2009-02-18    1026.0   \n",
+       "2969  Legendary ocean researcher Sylvia Earle shares...  2009-02-19    1096.0   \n",
+       "2469  The SETI Institute's Jill Tarter makes her TED...  2009-02-20    1283.0   \n",
+       "1970  Ed Ulbrich, the digital-effects guru from Digi...  2009-02-23    1087.0   \n",
+       "3181  Capt. Charles Moore of the Algalita Marine Res...  2009-02-24     440.0   \n",
+       "\n",
+       "        views                                                url  year  \n",
+       "2514  2273454  https://www.ted.com/talks/astonishing_performa...  2009  \n",
+       "2969  1325364  https://www.ted.com/talks/sylvia_earle_s_ted_p...  2009  \n",
+       "2469  1321636  https://www.ted.com/talks/jill_tarter_s_call_t...  2009  \n",
+       "1970   933438  https://www.ted.com/talks/ed_ulbrich_shows_how...  2009  \n",
+       "3181  1221708  https://www.ted.com/talks/capt_charles_moore_o...  2009  "
+      ]
+     },
+     "execution_count": 60,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df.sort_values('date').head()\n",
+    "#the oldest video we scraped is on  February 2009"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "####  Most viewed 25 talks:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 62,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>author</th>\n",
+       "      <th>title</th>\n",
+       "      <th>views</th>\n",
+       "      <th>date</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>2061</th>\n",
+       "      <td>Amy Cuddy</td>\n",
+       "      <td>Your body language may shape who you are</td>\n",
+       "      <td>51184388</td>\n",
+       "      <td>2012-10-01</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2314</th>\n",
+       "      <td>James Veitch</td>\n",
+       "      <td>This is what happens when you reply to spam email</td>\n",
+       "      <td>43945662</td>\n",
+       "      <td>2016-01-08</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2661</th>\n",
+       "      <td>Simon Sinek</td>\n",
+       "      <td>How great leaders inspire action</td>\n",
+       "      <td>42831358</td>\n",
+       "      <td>2010-05-04</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1525</th>\n",
+       "      <td>Brené Brown</td>\n",
+       "      <td>The power of vulnerability</td>\n",
+       "      <td>38474826</td>\n",
+       "      <td>2010-12-23</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2923</th>\n",
+       "      <td>Julian Treasure</td>\n",
+       "      <td>How to speak so that people want to listen</td>\n",
+       "      <td>32909947</td>\n",
+       "      <td>2014-06-27</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>132</th>\n",
+       "      <td>Tim Urban</td>\n",
+       "      <td>Inside the mind of a master procrastinator</td>\n",
+       "      <td>27867267</td>\n",
+       "      <td>2016-03-15</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>260</th>\n",
+       "      <td>Mary Roach</td>\n",
+       "      <td>10 things you didn't know about orgasm</td>\n",
+       "      <td>26573921</td>\n",
+       "      <td>2009-05-20</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2176</th>\n",
+       "      <td>Sam Berns</td>\n",
+       "      <td>My philosophy for a happy life</td>\n",
+       "      <td>26435626</td>\n",
+       "      <td>2018-03-28</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2379</th>\n",
+       "      <td>Cameron Russell</td>\n",
+       "      <td>Looks aren't everything. Believe me, I'm a model.</td>\n",
+       "      <td>26152097</td>\n",
+       "      <td>2013-01-16</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1087</th>\n",
+       "      <td>Robert Waldinger</td>\n",
+       "      <td>What makes a good life? Lessons from the longe...</td>\n",
+       "      <td>25941843</td>\n",
+       "      <td>2015-12-23</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>651</th>\n",
+       "      <td>Graham Shaw</td>\n",
+       "      <td>Why people believe they can't draw</td>\n",
+       "      <td>23803382</td>\n",
+       "      <td>2018-03-28</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1522</th>\n",
+       "      <td>Dan Pink</td>\n",
+       "      <td>The puzzle of motivation</td>\n",
+       "      <td>22282325</td>\n",
+       "      <td>2009-08-24</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2520</th>\n",
+       "      <td>Pamela Meyer</td>\n",
+       "      <td>How to spot a liar</td>\n",
+       "      <td>22036902</td>\n",
+       "      <td>2011-10-13</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1134</th>\n",
+       "      <td>Susan Cain</td>\n",
+       "      <td>The power of introverts</td>\n",
+       "      <td>21051536</td>\n",
+       "      <td>2012-03-02</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>26</th>\n",
+       "      <td>Apollo Robbins</td>\n",
+       "      <td>The art of misdirection</td>\n",
+       "      <td>19580712</td>\n",
+       "      <td>2013-09-13</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1756</th>\n",
+       "      <td>Shawn Achor</td>\n",
+       "      <td>The happy secret to better work</td>\n",
+       "      <td>19180692</td>\n",
+       "      <td>2012-02-01</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2368</th>\n",
+       "      <td>David Blaine</td>\n",
+       "      <td>How I held my breath for 17 minutes</td>\n",
+       "      <td>19029728</td>\n",
+       "      <td>2010-01-19</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2803</th>\n",
+       "      <td>Kelly McGonigal</td>\n",
+       "      <td>How to make stress your friend</td>\n",
+       "      <td>18989034</td>\n",
+       "      <td>2013-09-04</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2081</th>\n",
+       "      <td>Chimamanda Ngozi Adichie</td>\n",
+       "      <td>The danger of a single story</td>\n",
+       "      <td>17473788</td>\n",
+       "      <td>2009-10-07</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>691</th>\n",
+       "      <td>Pranav Mistry</td>\n",
+       "      <td>The thrilling potential of SixthSense technology</td>\n",
+       "      <td>17221672</td>\n",
+       "      <td>2009-11-16</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2779</th>\n",
+       "      <td>Mel Robbins</td>\n",
+       "      <td>How to stop screwing yourself over</td>\n",
+       "      <td>16992268</td>\n",
+       "      <td>2018-03-28</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2186</th>\n",
+       "      <td>Jon Ronson</td>\n",
+       "      <td>Strange answers to the psychopath test</td>\n",
+       "      <td>16558410</td>\n",
+       "      <td>2012-08-15</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2949</th>\n",
+       "      <td>Angela Lee Duckworth</td>\n",
+       "      <td>Grit: The power of passion and perseverance</td>\n",
+       "      <td>16353732</td>\n",
+       "      <td>2013-05-09</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3165</th>\n",
+       "      <td>Tom Thum</td>\n",
+       "      <td>The orchestra in my mouth</td>\n",
+       "      <td>16111673</td>\n",
+       "      <td>2013-07-19</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>97</th>\n",
+       "      <td>James Veitch</td>\n",
+       "      <td>The agony of trying to unsubscribe</td>\n",
+       "      <td>15674063</td>\n",
+       "      <td>2016-09-02</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "                        author  \\\n",
+       "2061                 Amy Cuddy   \n",
+       "2314              James Veitch   \n",
+       "2661               Simon Sinek   \n",
+       "1525               Brené Brown   \n",
+       "2923           Julian Treasure   \n",
+       "132                  Tim Urban   \n",
+       "260                 Mary Roach   \n",
+       "2176                 Sam Berns   \n",
+       "2379           Cameron Russell   \n",
+       "1087          Robert Waldinger   \n",
+       "651                Graham Shaw   \n",
+       "1522                  Dan Pink   \n",
+       "2520              Pamela Meyer   \n",
+       "1134                Susan Cain   \n",
+       "26              Apollo Robbins   \n",
+       "1756               Shawn Achor   \n",
+       "2368              David Blaine   \n",
+       "2803           Kelly McGonigal   \n",
+       "2081  Chimamanda Ngozi Adichie   \n",
+       "691              Pranav Mistry   \n",
+       "2779               Mel Robbins   \n",
+       "2186                Jon Ronson   \n",
+       "2949      Angela Lee Duckworth   \n",
+       "3165                  Tom Thum   \n",
+       "97                James Veitch   \n",
+       "\n",
+       "                                                  title     views        date  \n",
+       "2061           Your body language may shape who you are  51184388  2012-10-01  \n",
+       "2314  This is what happens when you reply to spam email  43945662  2016-01-08  \n",
+       "2661                   How great leaders inspire action  42831358  2010-05-04  \n",
+       "1525                         The power of vulnerability  38474826  2010-12-23  \n",
+       "2923         How to speak so that people want to listen  32909947  2014-06-27  \n",
+       "132          Inside the mind of a master procrastinator  27867267  2016-03-15  \n",
+       "260              10 things you didn't know about orgasm  26573921  2009-05-20  \n",
+       "2176                     My philosophy for a happy life  26435626  2018-03-28  \n",
+       "2379  Looks aren't everything. Believe me, I'm a model.  26152097  2013-01-16  \n",
+       "1087  What makes a good life? Lessons from the longe...  25941843  2015-12-23  \n",
+       "651                  Why people believe they can't draw  23803382  2018-03-28  \n",
+       "1522                           The puzzle of motivation  22282325  2009-08-24  \n",
+       "2520                                 How to spot a liar  22036902  2011-10-13  \n",
+       "1134                            The power of introverts  21051536  2012-03-02  \n",
+       "26                              The art of misdirection  19580712  2013-09-13  \n",
+       "1756                    The happy secret to better work  19180692  2012-02-01  \n",
+       "2368                How I held my breath for 17 minutes  19029728  2010-01-19  \n",
+       "2803                     How to make stress your friend  18989034  2013-09-04  \n",
+       "2081                       The danger of a single story  17473788  2009-10-07  \n",
+       "691    The thrilling potential of SixthSense technology  17221672  2009-11-16  \n",
+       "2779                 How to stop screwing yourself over  16992268  2018-03-28  \n",
+       "2186             Strange answers to the psychopath test  16558410  2012-08-15  \n",
+       "2949        Grit: The power of passion and perseverance  16353732  2013-05-09  \n",
+       "3165                          The orchestra in my mouth  16111673  2013-07-19  \n",
+       "97                   The agony of trying to unsubscribe  15674063  2016-09-02  "
+      ]
+     },
+     "execution_count": 62,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df = df.sort_values('views', ascending=False)\n",
+    "df[[\"author\",\"title\",\"views\",\"date\"]].head(25)\n",
+    "#you can analyze most viewed talks "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The most watched talk is 'Your body language may shape who you are' by Amy Cuddy with more tha 51 Million views"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 65,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "iVBORw0KGgoAAAANSUhEUgAAA34AAAFACAYAAADjxq7gAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEgAACxIB0t1+/AAAADl0RVh0U29mdHdhcmUAbWF0cGxvdGxpYiB2ZXJzaW9uIDMuMC4yLCBodHRwOi8vbWF0cGxvdGxpYi5vcmcvOIA7rQAAHDRJREFUeJzt3X+wZnV9H/D3RxaC4g9A1g1haSEJo2EyBnBDMUmdRGICJHVpogZb40bJbNKSVJKmKWln2pqJU+0kMZqmJIxowEQNYgzUopGiic1U0EV+yA8Nq5GwFNgNCkYZYzCf/vEc4nXDyr3sc+5z99zXa+aZ53u+5zyHz/nMsw/3fc95zq3uDgAAANP1hEUXAAAAwLgEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4jYsuoD9cdRRR/Vxxx236DIAAAAW4vrrr/+r7t74WNsd0MHvuOOOy44dOxZdBgAAwEJU1Z3L2c6lngAAABMn+AEAAEyc4AcAADBxgh8AAMDEjRb8quqZVXXjksfnq+r8qjqyqq6uqjuG5yOG7auq3lhVO6vq5qo6ZazaAAAA1pPRgl93f7K7T+ruk5I8J8lDSd6d5IIk13T3CUmuGZaT5MwkJwyP7UkuHKs2AACA9WS1LvU8PcmnuvvOJFuTXDLMX5Lk7GG8NcmlPXNtksOr6uhVqg8AAGCyViv4nZPk7cN4U3ffM4zvTbJpGB+T5K4lr9k1zAEAALAfRg9+VXVIkhcmeefe67q7k/QK97e9qnZU1Y49e/bMqUoAAIDpWo0zfmcm+Vh33zcs3/fIJZzD8+5h/u4kxy553eZh7mt090XdvaW7t2zcuHHEsgEAAKZhNYLfS/PVyzyT5Mok24bxtiRXLJl/+XB3z9OSPLjkklAAAAAepw1j7ryqDkvygiQ/tWT6tUkuq6pzk9yZ5CXD/FVJzkqyM7M7gL5izNoAAGAt+MT/uO+xN5qQZ/3rTY+9EXM3avDr7i8mefpec/dndpfPvbftJOeNWQ8AAMB6tFp39QQAAGBBBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4kYNflV1eFVdXlWfqKrbq+q5VXVkVV1dVXcMz0cM21ZVvbGqdlbVzVV1ypi1AQAArBdjn/F7Q5L3dfezknxHktuTXJDkmu4+Ick1w3KSnJnkhOGxPcmFI9cGAACwLowW/KrqaUmel+TiJOnuL3f3A0m2Jrlk2OySJGcP461JLu2Za5McXlVHj1UfAADAejHmGb/jk+xJ8paquqGq3lRVhyXZ1N33DNvcm2TTMD4myV1LXr9rmPsaVbW9qnZU1Y49e/aMWD4AAMA0jBn8NiQ5JcmF3X1yki/mq5d1Jkm6u5P0Snba3Rd195bu3rJx48a5FQsAADBVYwa/XUl2dfd1w/LlmQXB+x65hHN43j2svzvJsUtev3mYAwAAYD+MFvy6+94kd1XVM4ep05PcluTKJNuGuW1JrhjGVyZ5+XB3z9OSPLjkklAAAAAepw0j7/9nk/x+VR2S5NNJXpFZ2Lysqs5NcmeSlwzbXpXkrCQ7kzw0bAsAAMB+GjX4dfeNSbY8yqrTH2XbTnLemPUAAACsR2P/HT8AAAAWTPADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRs1+FXVZ6rq41V1Y1XtGOaOrKqrq+qO4fmIYb6q6o1VtbOqbq6qU8asDQAAYL1YjTN+39fdJ3X3lmH5giTXdPcJSa4ZlpPkzCQnDI/tSS5chdoAAAAmbxGXem5NcskwviTJ2UvmL+2Za5McXlVHL6A+AACASRk7+HWS91fV9VW1fZjb1N33DON7k2waxsckuWvJa3cNc1+jqrZX1Y6q2rFnz56x6gYAAJiMDSPv/3u6++6qekaSq6vqE0tXdndXVa9kh919UZKLkmTLli0rei0AAMB6NOoZv+6+e3jeneTdSU5Nct8jl3AOz7uHze9OcuySl28e5gAAANgPowW/qjqsqp7yyDjJDyS5JcmVSbYNm21LcsUwvjLJy4e7e56W5MEll4QCAADwOI15qeemJO+uqkf+O2/r7vdV1UeTXFZV5ya5M8lLhu2vSnJWkp1JHkryihFrAwAAWDdGC37d/ekk3/Eo8/cnOf1R5jvJeWPVAwAAsF4t4s85AAAAsIoEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiRg9+VXVQVd1QVe8Zlo+vquuqamdV/UFVHTLMf8OwvHNYf9zYtQEAAKwHq3HG71VJbl+y/Lokr+/ub03yuSTnDvPnJvncMP/6YTsAAAD206jBr6o2J/mhJG8alivJ85NcPmxySZKzh/HWYTnD+tOH7QEAANgPY5/x+40kv5jk74blpyd5oLsfHpZ3JTlmGB+T5K4kGdY/OGz/Napqe1XtqKode/bsGbN2AACASRgt+FXVDyfZ3d3Xz3O/3X1Rd2/p7i0bN26c564BAAAmacOI+/7uJC+sqrOSHJrkqUnekOTwqtownNXbnOTuYfu7kxybZFdVbUjytCT3j1gfAADAurCsM35Vdc1y5pbq7l/q7s3dfVySc5J8oLv/ZZIPJnnRsNm2JFcM4yuH5QzrP9DdvZz6AAAA2Leve8avqg5N8qQkR1XVEUkeudnKU/PV7+at1L9P8o6q+pUkNyS5eJi/OMlbq2pnks9mFhYBAADYT491qedPJTk/yTcluT5fDX6fT/Lfl/sf6e4/SfInw/jTSU59lG2+lOTFy90nAAAAy/N1g193vyHJG6rqZ7v7N1epJgAAAOZoWTd36e7frKrvSnLc0td096Uj1QUAAMCcLCv4VdVbk3xLkhuTfGWY7iSCHwAAwBq33D/nsCXJie6yCQAAcOBZ7h9wvyXJN45ZCAAAAONY7hm/o5LcVlUfSfI3j0x29wtHqQoAgAPSZe/6q0WXsOpe8qNHLboEeEzLDX7/ZcwiAAAAGM9y7+r5p2MXAgAAwDiWe1fPv87sLp5JckiSg5N8sbufOlZhAAAAzMdyz/g95ZFxVVWSrUlOG6soAAAA5me5d/X8ez3zR0l+cIR6AAAAmLPlXur5I0sWn5DZ3/X70igVAQAAMFfLvavnP1syfjjJZzK73BMAAIA1brnf8XvF2IUAAAAwjmV9x6+qNlfVu6tq9/B4V1VtHrs4AAAA9t9yb+7yliRXJvmm4fE/hzkAAADWuOUGv43d/Zbufnh4/G6SjSPWBQAAwJwsN/jdX1Uvq6qDhsfLktw/ZmEAAADMx3KD3yuTvCTJvUnuSfKiJD8xUk0AAADM0XL/nMMvJ9nW3Z9Lkqo6MsmvZhYIAQAAWMOWe8bv2Y+EviTp7s8mOXmckgAAAJin5Qa/J1TVEY8sDGf8lnu2EAAAgAVabnj7tSQfrqp3DssvTvKacUoCAABgnpYV/Lr70qrakeT5w9SPdPdt45UFAADAvCz7cs0h6Al7AAAAB5jlfscPAACAA5TgBwAAMHGCHwAAwMSNFvyq6tCq+khV3VRVt1bVq4f546vquqraWVV/UFWHDPPfMCzvHNYfN1ZtAAAA68mYf4vvb5I8v7u/UFUHJ/mzqnpvkp9P8vrufkdV/XaSc5NcODx/rru/tarOSfK6JD82Yn3AKnr9235w0SWsup/7F3+86BIAAJKMeMavZ74wLB48PDqzPwlx+TB/SZKzh/HWYTnD+tOrqsaqDwAAYL0Y9Tt+VXVQVd2YZHeSq5N8KskD3f3wsMmuJMcM42OS3JUkw/oHkzz9Ufa5vap2VNWOPXv2jFk+AADAJIwa/Lr7K919UpLNSU5N8qw57POi7t7S3Vs2bty43zUCAABM3arc1bO7H0jywSTPTXJ4VT3y3cLNSe4exncnOTZJhvVPS3L/atQHAAAwZWPe1XNjVR0+jJ+Y5AVJbs8sAL5o2GxbkiuG8ZXDcob1H+juHqs+AACA9WLMu3oeneSSqjoos4B5WXe/p6puS/KOqvqVJDckuXjY/uIkb62qnUk+m+ScEWsDAABYN0YLft19c5KTH2X+05l932/v+S8lefFY9QAAAKxXq/IdPwAAABZH8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJm7DoguAA9V73nzmoktYdT/8yvcuugQAAB4HZ/wAAAAmzhk//t6nfnProktYdd/ys1csugQAABidM34AAAATJ/gBAABMnOAHAAAwcb7jB7AGnXnFTy+6hFX33q2/vegSAGCyBD8AgK/jxe+6ZdElrLp3/ui3L7oEYM4EPwAOeD/0rt9ZdAmr7n/96E8tugQADiC+4wcAADBxgh8AAMDECX4AAAATJ/gBAABMnOAHAAAwcYIfAADAxPlzDgCwzrzw8isWXcKqu/JFWxddAsBCOeMHAAAwcYIfAADAxAl+AAAAEyf4AQAATNxowa+qjq2qD1bVbVV1a1W9apg/sqqurqo7hucjhvmqqjdW1c6qurmqThmrNgAAgPVkzDN+Dyf5t919YpLTkpxXVScmuSDJNd19QpJrhuUkOTPJCcNje5ILR6wNAABg3Rgt+HX3Pd39sWH810luT3JMkq1JLhk2uyTJ2cN4a5JLe+baJIdX1dFj1QcAALBerMp3/KrquCQnJ7kuyabuvmdYdW+STcP4mCR3LXnZrmFu731tr6odVbVjz549o9UMAAAwFaMHv6p6cpJ3JTm/uz+/dF13d5Jeyf66+6Lu3tLdWzZu3DjHSgEAAKZpw5g7r6qDMwt9v9/dfzhM31dVR3f3PcOlnLuH+buTHLvk5ZuHucdtz4W/tz8vPyBt/FcvW3QJAADAGjPmXT0rycVJbu/uX1+y6sok24bxtiRXLJl/+XB3z9OSPLjkklAAAAAepzHP+H13kh9P8vGqunGY+w9JXpvksqo6N8mdSV4yrLsqyVlJdiZ5KMkrRqwNAABg3Rgt+HX3nyWpfaw+/VG27yTnjVUPAADAerUqd/UEAABgcQQ/AACAiRv1rp4AAADzdN9vfGTRJayqTeefOpf9OOMHAAAwcYIfAADAxAl+AAAAEyf4AQAATJzgBwAAMHGCHwAAwMQJfgAAABMn+AEAAEyc4AcAADBxgh8AAMDECX4AAAATJ/gBAABMnOAHAAAwcYIfAADAxAl+AAAAEyf4AQAATJzgBwAAMHGCHwAAwMQJfgAAABMn+AEAAEyc4AcAADBxgh8AAMDECX4AAAATJ/gBAABMnOAHAAAwcaMFv6p6c1XtrqpblswdWVVXV9Udw/MRw3xV1RuramdV3VxVp4xVFwAAwHoz5hm/301yxl5zFyS5prtPSHLNsJwkZyY5YXhsT3LhiHUBAACsK6MFv+7+UJLP7jW9Ncklw/iSJGcvmb+0Z65NcnhVHT1WbQAAAOvJan/Hb1N33zOM702yaRgfk+SuJdvtGub+garaXlU7qmrHnj17xqsUAABgIhZ2c5fu7iT9OF53UXdv6e4tGzduHKEyAACAaVnt4HffI5dwDs+7h/m7kxy7ZLvNwxwAAAD7abWD35VJtg3jbUmuWDL/8uHunqcleXDJJaEAAADshw1j7biq3p7ke5McVVW7kvznJK9NcllVnZvkziQvGTa/KslZSXYmeSjJK8aqCwAAYL0ZLfh190v3ser0R9m2k5w3Vi0AAADr2cJu7gIAAMDqEPwAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4gQ/AACAiRP8AAAAJk7wAwAAmDjBDwAAYOIEPwAAgIkT/AAAACZO8AMAAJg4wQ8AAGDiBD8AAICJE/wAAAAmTvADAACYOMEPAABg4tZU8KuqM6rqk1W1s6ouWHQ9AAAAU7Bmgl9VHZTkt5KcmeTEJC+tqhMXWxUAAMCBb80EvySnJtnZ3Z/u7i8neUeSrQuuCQAA4IC3loLfMUnuWrK8a5gDAABgP1R3L7qGJElVvSjJGd39k8Pyjyf5J939M3tttz3J9mHxmUk+uaqFLs9RSf5q0UUcQPRrZfRrZfRrZfRr5fRsZfRrZfRrZfRrZfRrZdZqv/5xd298rI02rEYly3R3kmOXLG8e5r5Gd1+U5KLVKurxqKod3b1l0XUcKPRrZfRrZfRrZfRr5fRsZfRrZfRrZfRrZfRrZQ70fq2lSz0/muSEqjq+qg5Jck6SKxdcEwAAwAFvzZzx6+6Hq+pnkvxxkoOSvLm7b11wWQAAAAe8NRP8kqS7r0py1aLrmIM1fSnqGqRfK6NfK6NfK6NfK6dnK6NfK6NfK6NfK6NfK3NA92vN3NwFAACAcayl7/gBAAAwAsEPAABg4gS/ZaiqY6vqg1V1W1XdWlWvGuaPrKqrq+qO4fmIYb6q6o1VtbOqbq6qU5bs63VVdcvw+LFFHdOYHke/nlVVH66qv6mqX9hrX2dU1SeHXl6wiOMZ25z79eaq2l1VtyziWFbDvPq1r/1M0Rx7dmhVfaSqbhr28+pFHdOY5vlvclh/UFXdUFXvWe1jWQ1z/gz7TFV9vKpurKodiziesc25X4dX1eVV9Ymqur2qnruIYxrTHD+/njm8rx55fL6qzl/UcY1lzu+vnxv2cUtVvb2qDl3EMY1pzv161dCrW9fse6u7PR7jkeToJKcM46ck+fMkJyb5b0kuGOYvSPK6YXxWkvcmqSSnJblumP+hJFdndlOdwzL7ExZPXfTxrYF+PSPJdyZ5TZJfWLKfg5J8Ksk3JzkkyU1JTlz08a3Vfg3rnpfklCS3LPq41nq/9rWfRR/fGu9ZJXnyMD44yXVJTlv08a3Vfi3Z388neVuS9yz62NZ6v5J8JslRiz6mA6hflyT5yWF8SJLDF318a7lfS/Z5UJJ7M/uj1ws/xrXYryTHJPmLJE8cli9L8hOLPr413K9vT3JLkidl9nP+/07yrYs+vr0fzvgtQ3ff090fG8Z/neT2zP5BbM3sQzfD89nDeGuSS3vm2iSHV9XRmb2RPtTdD3f3F5PcnOSMVTyUVbHSfnX37u7+aJK/3WtXpybZ2d2f7u4vJ3nHsI9JmWO/0t0fSvLZ1ah7UebVr6+zn8mZY8+6u78wLB48PCZ3h7B5/pusqs2Z/dLvTatQ+kLMs1/rwbz6VVVPy+yXfRcP2325ux9YlYNYRSO9v05P8qnuvnO0whdkzv3akOSJVbUhs0Dz/0Yuf9XNsV/fltmJnoe6++Ekf5rkR1bhEFZE8FuhqjouycmZ/aZ7U3ffM6y6N8mmYXxMkruWvGzXMHdTkjOq6klVdVSS70ty7CqUvTDL7Ne+7KuPk7Wf/Vp35tWvvfYzafvbs+GyxRuT7E5ydXdPumdzeI/9RpJfTPJ3Y9S31syhX53k/VV1fVVtH6XINWQ/+3V8kj1J3jJcSvymqjpsrFrXgjn+P/KcJG+fa3Fr0P70q7vvTvKrSf4yyT1JHuzu949W7Bqwn++vW5L806p6elU9KbOr/9bcz/iC3wpU1ZOTvCvJ+d39+aXrurvzGL/5Hv7BXJXk/2b2gfPhJF8Zp9rF299+rTf6tTLz6tfX28/UzKNn3f2V7j4pyeYkp1bVt49S7Bqwv/2qqh9Osru7rx+vyrVjTv8mv6e7T0lyZpLzqup58690bZhDvzZkdmn/hd19cpIvZnZJ2iTN8TP/kCQvTPLOuRe5hszh8+uIzM56HZ/km5IcVlUvG6nchZvDz/i3J3ldkvcneV+SG7MGf8YX/Japqg7O7A3x+939h8P0fcMlnBmedw/zd+drU/7mYS7d/ZruPqm7X5DZ92X+fDXqX20r7Ne+7LOPUzOnfq0b8+rXPvYzSfN+jw2XlH0wE7xcPZlbv747yQur6jOZXar+/Kr6vZFKXqh5vb+Gswzp7t1J3p3ZJf+TM6d+7Uqya8lZ98szC4KTM+fPrzOTfKy775t/pWvDnPr1/Un+orv3dPffJvnDJN81Vs2LNMfPr4u7+znd/bwkn8sa/Blf8FuGqqrMrqG/vbt/fcmqK5NsG8bbklyxZP7lNXNaZqfH7xkukXr6sM9nJ3l2Zr8ZmJTH0a99+WiSE6rq+OE3dOcM+5iUOfZrXZhXv77OfiZnjj3bWFWHD+MnJnlBkk/Mv+LFmle/uvuXuntzdx+X2efXB7p7cr8xn+P767Cqesoj4yQ/kNnlU5Myx/fXvUnuqqpnDlOnJ7ltzuUu3Aj/j3xpJnyZ5xz79ZdJThu+nlSZvb9un3e9izbP91dVPWN4/keZfb/vbfOtdg56DdxhZq0/knxPZqd4b87s1O2NmV27+/Qk1yS5I7O79xw5bF9JfiuzO1J+PMmWYf7QzD6Ub0tybZKTFn1sa6Rf35jZby4/n+SBYfzUYd1Zmf3G5FNJ/uOij+0A6NfbM7sW/2+H+XMXfXxrtV/72s+ij2+N9+zZSW4Y9nNLkv+06GNby/3aa5/fm+ne1XNe769vzuy78DcludVn/rI+809KsmPY1x8lOWLRx7fG+3VYkvuTPG3Rx3WA9OvVmf1y75Ykb03yDYs+vjXer/+T2c/4NyU5fdHH9miPGgoFAABgolzqCQAAMHGCHwAAwMQJfgAAABMn+AEAAEyc4AcAADBxgh8AAMDECX4AsAqq6qBF1wDA+iX4AcBequqXq+r8JcuvqapXVdW/q6qPVtXNVfXqJev/qKqur6pbq2r7kvkvVNWvVdVNSZ67yocBAH9P8AOAf+jNSV6eJFX1hCTnJLk3yQlJTk1yUpLnVNXzhu1f2d3PSbIlyb+pqqcP84clua67v6O7/2w1DwAAltqw6AIAYK3p7s9U1f1VdXKSTUluSPKdSX5gGCfJkzMLgh/KLOz982H+2GH+/iRfSfKu1awdAB6N4AcAj+5NSX4iyTdmdgbw9CT/tbt/Z+lGVfW9Sb4/yXO7+6Gq+pMkhw6rv9TdX1mtggFgX1zqCQCP7t1JzsjsTN8fD49XVtWTk6SqjqmqZyR5WpLPDaHvWUlOW1TBALAvzvgBwKPo7i9X1QeTPDCctXt/VX1bkg9XVZJ8IcnLkrwvyU9X1e1JPpnk2kXVDAD7Ut296BoAYM0ZburysSQv7u47Fl0PAOwPl3oCwF6q6sQkO5NcI/QBMAXO+AEAAEycM34AAAATJ/gBAABMnOAHAAAwcYIfAADAxAl+AAAAE/f/AdPaCd6NPyEYAAAAAElFTkSuQmCC\n",
+      "text/plain": [
+       "<Figure size 1080x360 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "import seaborn as sns\n",
+    "import matplotlib.pyplot as plt\n",
+    "\n",
+    "plt.figure(figsize=(15,5))\n",
+    "sns.countplot(df[\"year\"])\n",
+    "plt.show()\n",
+    "#you can analyze trend of publication by year"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "TED talks appearantly broadcast more videos on 2018 than anytime. Considering we are on February 2019, 2019 may have higher videos than 2018"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 67,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.axes._subplots.AxesSubplot at 0x11bb49908>"
+      ]
+     },
+     "execution_count": 67,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "sns.barplot(x= df.groupby([\"year\"]).sum()[\"views\"].index, y= df.groupby([\"year\"]).sum()[\"views\"])\n",
+    "#we can find the views per year"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "TED talks are watched the most on 2013, combining those two last graphs, we may conclude that an avarage video on 2013 was watched more than an avarage video on 2018"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Talk contents: "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 70,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 1080x360 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "tags = []\n",
+    "for i in range(len(df.loc[:,'tags'])):\n",
+    "    ls = list(df.loc[:,'tags'])[i][2:-2].split(',')\n",
+    "    for c in range(len(ls)):\n",
+    "        value= list(df.loc[:,'tags'])[i][2:-2].split(',')[c]\n",
+    "        tags.append(value.replace(\"'\",\"\"))\n",
+    "tags = pd.DataFrame(tags,columns=[\"tags\"])\n",
+    "tags.iloc[:,0].value_counts().head(10)\n",
+    "tags = pd.DataFrame(tags.iloc[:,0].value_counts()).reset_index()\n",
+    "plt.figure(figsize=(15,5))\n",
+    "sns.barplot(x=tags[\"index\"].head(10),y=tags[\"tags\"].head(10))\n",
+    "plt.xlabel(\"tags\")\n",
+    "plt.ylabel(\"talks\")\n",
+    "plt.show()\n",
+    "\n",
+    "#you can analyze talk-topics"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Technology is the most talked topic, followed by Science and Society"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 5.Conclusion"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "1. We have list of !!!! talk links saved as csv file in our computer. We can easily increase number of talks we want to scrape, or we can decide to scrape the oldest videos with these codes.\n",
+    "2. We succeeded to have a csv file of datas of !!! TED talks. \n",
+    "3. Those datas are classified as author, title, keywords, description, date, duration, views,and url. \n",
+    "4. We can basically see descriptions of each column: mean of the duration, most talked author etc.\n",
+    "5. We can see:\n",
+    "    <bn> \n",
+    "        most viewed talks\n",
+    "    <bn> \n",
+    "        the distribution of tags (all times or by year)\n",
+    "    <bn> \n",
+    "        The trend of publication by TED"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "What can be done further? \n",
+    "    <bn>\n",
+    "    \n",
+    "    Ted has speakers occupation data on the video page.\n",
+    "    We can see the pattern of occupations during time or the correlations between occupations and contents. \n",
+    "    \n",
+    "   <bn>\n",
+    "    \n",
+    "    Secondly, Ted has the suggested videos part and the description of those videos. We can analyze the pattern on suggestions. Is it based on speakers, year, or tags?\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
